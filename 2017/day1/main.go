@@ -5,14 +5,13 @@ import "fmt"
 func main() {
 	var total int
 	l := len(input)
-	prev := int(input[l-1] - '0')
-
-	for _, c := range input {
-		curr := int(c - '0')
-		if curr == prev {
-			total += curr
+	dist := l / 2
+	for i := range input {
+		match := (i + dist) % l
+		c := input[i]
+		if c == input[match] {
+			total += int(c - '0')
 		}
-		prev = curr
 	}
 
 	fmt.Printf("total: %d\n", total)
