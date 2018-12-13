@@ -9,20 +9,20 @@ import (
 
 func main() {
 
-	if err := part1("input.txt"); err != nil {
+	if err := run("input.txt"); err != nil {
 		fmt.Println(err)
 	}
 }
 
-func part1(filename string) error {
+func run(filename string) error {
 	w, err := readFile(filename)
 	if err != nil {
 		return err
 	}
 
-	//w.print()
+	// w.print()
 	for w.evolve() {
-		//w.print()
+		// w.print()
 	}
 
 	return nil
@@ -30,8 +30,9 @@ func part1(filename string) error {
 
 type cart struct {
 	x, y      int
-	dx, dy    int
-	direction crossChange
+	direction byte
+	cross     crossChange
+	dead      bool
 }
 
 type track [][]byte
@@ -57,19 +58,10 @@ func (w *world) print() {
 		lines[y] = line
 	}
 	for _, cart := range w.carts {
-		var sym byte
-		if cart.dx == 0 {
-			if cart.dy == 1 {
-				sym = 'v'
-			} else {
-				sym = '^'
-			}
-		} else if cart.dx == 1 {
-			sym = '>'
-		} else {
-			sym = '<'
+		if cart.dead {
+			continue
 		}
-		lines[cart.y][cart.x] = sym
+		lines[cart.y][cart.x] = cart.direction
 	}
 
 	for _, l := range lines {
@@ -87,96 +79,109 @@ func (w *world) evolve() bool {
 		}
 		return a.y < b.y
 	})
+
 	for i := range w.carts {
 		c := &w.carts[i]
+		if c.dead {
+			continue
+		}
 
 		cell := w.track[c.y][c.x]
 		switch cell {
 		case '|':
 		case '-':
 		case '/':
-			// Hopelessly wrong - reflection!
-			// v => <  0,1 => 1,0
-			// > => ^  1,0 => 0,-1
-			// < => v  -1,0 => 0, 1
-			// ^ => >  0,-1 => 1, 0
-			if c.dx == 0 {
-				if c.dy == 1 {
-					//  => v
-					c.dx, c.dy = -1, 0
-				} else {
-					c.dx, c.dy = 1, 0
-				}
-			} else {
-				if c.dx == 1 {
-					//  => v
-					c.dx, c.dy = 0, -1
-				} else {
-					c.dx, c.dy = 0, 1
-				}
+			switch c.direction {
+			case '>':
+				c.direction = '^'
+			case '<':
+				c.direction = 'v'
+			case '^':
+				c.direction = '>'
+			case 'v':
+				c.direction = '<'
 			}
 		case '\\':
-			if c.dx == 0 {
-				if c.dy == 1 {
-					//  => v
-					c.dx, c.dy = +1, 0
-				} else {
-					c.dx, c.dy = -1, 0
-				}
-			} else {
-				if c.dx == 1 {
-					//  => v
-					c.dx, c.dy = 0, 1
-				} else {
-					c.dx, c.dy = 0, -1
-				}
-			}
-
-		case '+':
 			switch c.direction {
+			case '>':
+				c.direction = 'v'
+			case '<':
+				c.direction = '^'
+			case '^':
+				c.direction = '<'
+			case 'v':
+				c.direction = '>'
+			}
+		case '+':
+			switch c.cross {
 			case left:
-				// v 0, 1 => 1, 0 >
-				// ^ 0, -1 => -1, 0 <
-				// > 1, 0 => 0, -1 ^
-				// < -1, 0 => 0, 1 v
-				c.dx, c.dy = c.dy, -c.dx
+				switch c.direction {
+				case '>':
+					c.direction = '^'
+				case '<':
+					c.direction = 'v'
+				case '^':
+					c.direction = '<'
+				case 'v':
+					c.direction = '>'
+				}
 			case straight:
 			case right:
-				c.dx, c.dy = -c.dy, c.dx
-
+				switch c.direction {
+				case '>':
+					c.direction = 'v'
+				case '<':
+					c.direction = '^'
+				case '^':
+					c.direction = '>'
+				case 'v':
+					c.direction = '<'
+				}
 			}
-			c.direction++
-			if c.direction > right {
-				c.direction = left
+			c.cross++
+			if c.cross > right {
+				c.cross = left
 			}
 		}
-		c.x += c.dx
-		c.y += c.dy
+
+		switch c.direction {
+		case '>':
+			c.x++
+		case '<':
+			c.x--
+		case '^':
+			c.y--
+		case 'v':
+			c.y++
+		}
 
 		// Check for collision
 		for j, c2 := range w.carts {
-			if i == j {
+			if i == j || c2.dead {
 				continue
 			}
 			if c2.x == c.x && c2.y == c.y {
 				fmt.Printf("collision at %d,%d\n", c.x, c.y)
-				// remove cards i & j
-				carts := w.carts[:0]
-				for k, cart := range w.carts {
-					if k != i && k != j {
-						carts = append(carts, cart)
-					}
-				}
-				w.carts = carts
-
-				if len(w.carts) == 1 {
-					fmt.Printf("last card at %d,%d", w.carts[0].x, w.carts[0].y)
-					return false
-				}
-				return true
+				c.dead = true
+				w.carts[j].dead = true
 			}
 		}
 	}
+
+	var last *cart
+	count := 0
+	for cc := range w.carts {
+		cart := &w.carts[cc]
+		if !cart.dead {
+			count++
+			last = cart
+		}
+	}
+	if count == 1 {
+		fmt.Printf("last cart at %d,%d\n", last.x, last.y)
+		return false
+	}
+
 	return true
 }
 
@@ -202,41 +207,19 @@ func readFile(filename string) (w world, err error) {
 		cells := make([]byte, lineLength)
 		for i, c := range line {
 			switch c {
-			case '<':
-				c = '-'
+			case '<', '>', '^', 'v':
 				carts = append(carts, cart{
-					x:  i,
-					y:  len(track),
-					dx: -1,
-					dy: 0,
+					x:         i,
+					y:         len(track),
+					direction: c,
 				})
-			case '>':
-				c = '-'
-				carts = append(carts, cart{
-					x:  i,
-					y:  len(track),
-					dx: 1,
-					dy: 0,
-				})
-			case '^':
-				c = '|'
-				carts = append(carts, cart{
-					x:  i,
-					y:  len(track),
-					dx: 0,
-					dy: -1,
-				})
-			case 'v':
-				c = '|'
-				carts = append(carts, cart{
-					x:  i,
-					y:  len(track),
-					dx: 0,
-					dy: 1,
-				})
+				if c == '>' || c == '<' {
+					c = '-'
+				} else {
+					c = '|'
+				}
 			}
 			cells[i] = c
-			// TODO some kind of matrix / vector??
 		}
 		track = append(track, cells)
 	}
