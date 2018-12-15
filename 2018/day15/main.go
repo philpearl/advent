@@ -17,26 +17,67 @@ func main() {
 	// part1("test5.txt")
 	// part1("test6.txt")
 	// part1("test7.txt")
-	part1("inputred.txt")
+	part1("input.txt")
+	part2("input.txt")
 }
 
-func part1(filename string) {
-	w, err := readInput(filename)
+func part2(filename string) {
+	lines, err := readInput(filename)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
+	for ap := 4; ; ap++ {
+		w := makeWorld(lines, ap)
+		rounds := 0
+		// w.print()
+		for w.runRound() {
+			// fmt.Printf("round %d complete\n", rounds+1)
+			// fmt.Println()
+			// w.print()
+			rounds++
+		}
+
+		de := w.deadElves()
+		fmt.Printf("ap=%d, %d dead elves\n", ap, de)
+		hp := w.totalHP()
+		fmt.Printf("%d rounds %d points = %d\n", rounds, hp, rounds*hp)
+		if de == 0 {
+			break
+		}
+	}
+}
+
+func (w *world) deadElves() int {
+	count := 0
+	for _, u := range w.units {
+		if u.species == 'E' && u.hitPoints <= 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func part1(filename string) {
+	lines, err := readInput(filename)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	w := makeWorld(lines, 3)
+
 	rounds := 0
 	w.print()
 	for w.runRound() {
-		fmt.Println()
-		w.print()
+		// fmt.Printf("round %d complete\n", rounds+1)
+		// fmt.Println()
+		// w.print()
 		rounds++
 	}
 
-	fmt.Println()
-	w.print()
+	// fmt.Println()
+	// w.print()
 
 	hp := w.totalHP()
 	fmt.Printf("%d rounds %d points = %d\n", rounds, hp, rounds*hp)
@@ -56,35 +97,19 @@ func (w *world) runRound() (cont bool) {
 	// Order units by book-order location
 	w.sortUnits()
 
-	for i := range w.units {
-		u := w.units[i]
+	for _, u := range w.units {
 		if u.hitPoints <= 0 {
 			continue
 		}
 
 		// Any enemies left?
-		tt := u.targetType()
-		finished := true
-		for _, v := range w.units {
-			if v.hitPoints > 0 && v.species == tt {
-				finished = false
-				break
-			}
-		}
-		if finished {
+		if !w.anyLeft(u.targetType()) {
 			return false
 		}
 
 		// find shortest paths to a cell adjacent to an enemy, then get our next move
-		// fmt.Printf("next step for %v\n", u.location)
-		moveTo, found := w.findNextStep(u)
-
-		if found {
-			// Move
-			// fmt.Printf("move %v to %v\n", u.location, moveTo)
+		if moveTo, found := w.findNextStep(u); found {
 			w.move(u, moveTo)
-		} else {
-			// fmt.Printf("%v does not move\n", u.location)
 		}
 
 		// Now try to attack
@@ -92,6 +117,15 @@ func (w *world) runRound() (cont bool) {
 	}
 
 	return true
+}
+
+func (w *world) anyLeft(species byte) bool {
+	for _, u := range w.units {
+		if u.hitPoints > 0 && u.species == species {
+			return true
+		}
+	}
+	return false
 }
 
 type cell struct {
@@ -146,6 +180,7 @@ func (w *world) print() {
 
 		fmt.Printf("\n")
 	}
+	fmt.Printf("\n")
 }
 
 func (w *world) sortUnits() {
@@ -180,7 +215,7 @@ func (w *world) attack(u *unit) {
 		return
 	}
 
-	cell := &w.arena[target.x+w.w*target.y]
+	cell := w.cell(target.location)
 	cell.content = '.'
 	cell.unit = nil
 }
@@ -189,17 +224,21 @@ func (w *world) move(from *unit, to location) {
 	if distance(from.location, to) != 1 {
 		panic(fmt.Sprintf("Illegal move for %v to %v\n", *from, to))
 	}
-	cell := &w.arena[from.x+w.w*from.y]
+	cell := w.cell(from.location)
 	cell.content = '.'
 	cell.unit = nil
 
 	from.location = to
-	cell = &w.arena[from.x+w.w*from.y]
+	cell = w.cell(from.location)
 	if cell.content != '.' {
 		panic(fmt.Sprintf("moving to %v, content is %c", to, cell.content))
 	}
 	cell.content = from.species
 	cell.unit = from
+}
+
+func (w *world) cell(l location) *cell {
+	return &w.arena[l.x+w.w*l.y]
 }
 
 func (u *unit) targetType() byte {
@@ -246,30 +285,29 @@ func (w *world) findNextStep(from *unit) (location, bool) {
 		depth++
 	}
 
-	// fmt.Printf("%d Paths found %v\n", len(ends), ends)
+	if len(ends) == 0 {
+		return location{}, false
+	}
 
-	// Calculate every shortest path to find candidate next steps
-	firstStep := location{x: 127, y: 127}
-	var found bool
+	// fmt.Printf("%d Paths found %v\n", len(ends), ends)
+	// find shortest path starting point that's first in reading order
+	end := location{x: 127, y: 127}
 	for _, e := range ends {
 		if e == from.location {
 			return e, false
 		}
-		// Calculate path
-		for {
-			n := parents[e]
-			if n == from.location {
-				if e.y < firstStep.y || (e.y == firstStep.y && e.x == firstStep.x) {
-					firstStep = e
-					found = true
-				}
-				break
-			}
-			e = n
+		if e.y < end.y || (e.y == end.y && e.x < end.x) {
+			end = e
 		}
-
 	}
-	return firstStep, found
+
+	for {
+		n := parents[end]
+		if n == from.location {
+			return end, true
+		}
+		end = n
+	}
 }
 
 type checkResult int
@@ -309,13 +347,12 @@ func (w *world) candidates(l location) []location {
 	}
 }
 
-func readInput(filename string) (w world, err error) {
+func readInput(filename string) (lines [][]byte, err error) {
 	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return w, err
-	}
+	return bytes.Split(data, []byte{'\n'}), err
+}
 
-	lines := bytes.Split(data, []byte{'\n'})
+func makeWorld(lines [][]byte, elfAttackPower int) (w world) {
 	w.w, w.h = len(lines[0]), len(lines)
 
 	w.arena = make([]cell, int(w.w)*int(w.h))
@@ -325,12 +362,18 @@ func readInput(filename string) (w world, err error) {
 			cell := &w.arena[x+y*int(w.w)]
 			cell.content = c
 			if c == 'G' || c == 'E' {
+				var ap int
+				if c == 'G' {
+					ap = 3
+				} else {
+					ap = elfAttackPower
+				}
 				w.units = append(w.units, &unit{
 					location: location{
 						x: x,
 						y: y,
 					},
-					attackPower: 3,
+					attackPower: ap,
 					hitPoints:   200,
 					species:     c,
 				})
@@ -339,5 +382,5 @@ func readInput(filename string) (w world, err error) {
 		}
 	}
 
-	return w, nil
+	return w
 }
