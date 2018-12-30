@@ -1,0 +1,60 @@
+#ip 3
+addi 3 16 3 jump to init code
+seti 1 6 5  r5 =1   
+seti 1 8 2  r2 = 1   <--
+mulr 5 2 1  r1 = r2 * r5 <--
+eqrr 1 4 1  if r1 == r4 (10551378) (r1)
+addr 1 3 3  if true jump 1
+addi 3 1 3  jump 1 (r1 = 0) 
+addr 5 0 0  r0 += r5
+addi 2 1 2  r2++
+gtrr 2 4 1  r2 > r4 (10551378)
+addr 3 1 3  if true jump 1
+seti 2 3 3  jump to instruction 3
+addi 5 1 5  r5++
+gtrr 5 4 1  r5 > r4 (10551378)
+addr 1 3 3  if true jump 1
+seti 1 8 3  jump to instruction 2
+mulr 3 3 3  stop
+
+var r0, r1, r2, r3, r4, r5 int
+
+r5 = 1
+for {
+	r2 = 1
+	for {
+		r1 = r2 * r5
+		if r1 == r4 {
+			r0 += r5
+		}
+		r2++
+		if r2 > r4 {
+			r5++
+			if r5 > r4 {
+				stop
+			} else {
+				break
+			}
+		}
+	}
+}
+
+addi 4 2 4  r4 = 2
+mulr 4 4 4  r4 = 4
+mulr 3 4 4  r4 = (19*r4)
+muli 4 11 4 r4 = (11 * r4)
+addi 1 6 1   (r1 + 6) = 6
+mulr 1 3 1   (r1 * r3(22)) = 132
+addi 1 10 1  (r1 + 10) = 142
+addr 4 1 4   (r4 + r1)
+addr 3 0 3   Add r0=1 to r3
+seti 0 0 3   skip
+setr 3 9 1   r1 = r3 = 27
+mulr 1 3 1   r1*28
+addr 3 1 1   r1+29
+mulr 3 1 1   r1 * 30
+muli 1 14 1  r1 * 14
+mulr 1 3 1   r1 * 32
+addr 4 1 4   r4+= r1
+seti 0 4 0   r0 = 0
+seti 0 0 3   r3 = 0 (execute instruction 1)
